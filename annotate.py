@@ -11,7 +11,7 @@ from mrcnn.config import Config
 from mrcnn.model import MaskRCNN
 import matplotlib.pyplot as plt
 import tensorflow as tf
-tf.logging.set_verbosity(tf.logging.ERROR)
+# tf.logging.set_verbosity(tf.logging.ERROR)
 
 
 def annotateResult(result, image_name, label):
