@@ -30,7 +30,7 @@ class CustomConfig(Config):
     Derives from the base Config class and overrides some values.
     """
     # Give the configuration a recognizable name
-    NAME = "CustomLabel"
+    NAME = "text_bubble"
 
     IMAGES_PER_GPU = 1
 
@@ -56,7 +56,7 @@ class CustomDataset(utils.Dataset):
         subset: Subset to load: train or val
         """
         # Add classes. We have only one class to add.
-        self.add_class("CustomLabel", 1, "CustomLabel")
+        self.add_class("text_bubble", 1, "text_bubble")
 
         # Train or validation dataset?
         assert subset in ["train", "val"]
@@ -104,7 +104,7 @@ class CustomDataset(utils.Dataset):
             height, width = image.shape[:2]
 
             self.add_image(
-                "customLabel",
+                "text_bubble",
                 image_id=a['filename'],  # use file name as a unique image id
                 path=image_path,
                 width=width, height=height,
@@ -119,7 +119,7 @@ class CustomDataset(utils.Dataset):
         """
         # If not a custom dataset image, delegate to parent class.
         image_info = self.image_info[image_id]
-        if image_info["source"] != "customLabel":
+        if image_info["source"] != "text_bubble":
             return super(self.__class__, self).load_mask(image_id)
 
         # Convert polygons to a bitmap mask of shape
@@ -129,12 +129,35 @@ class CustomDataset(utils.Dataset):
                         dtype=np.uint8)
         for i, p in enumerate(info["polygons"]):
             # Get indexes of pixels inside the polygon and set them to 1
-            rr, cc = skimage.draw.polygon(p['all_points_y'], p['all_points_x'])
-            mask[rr, cc, i] = 1
+            if p["name"] == "ellipse":
+                cx = int(p["cx"])
+                cy = int(p["cy"])
+                rx = int(p["rx"])
+                ry = int(p["ry"])
+                r = np.sqrt(rx**2 + ry**2)
+                all_points_x = [cx+rx*np.cos(i) for i in thita]
+                all_points_y = [cy+ry*np.sin(i) for i in thita]
+
+            elif p["name"] == "polygons":
+                all_points_x = p["all_points_x"]
+                all_points_y = p["all_points_y"]
+            else:    
+                x = int(p["x"])
+                y = int(p["y"])
+                w = int(p["width"])
+                h = int(p["height"])
+
+                # calculate rectangle points from x,y,w and h
+                all_points_x = [x, x+w, x+w, x]
+                all_points_y = [y, y, y+h, y+h]
+
+            rr, cc = skimage.draw.polygon(all_points_y, all_points_x)
+            # rr, cc = skimage.draw.polygon(p['ry'], p['cx'])
+            mask[rr, cc, i] = 1    
 
         # Return mask, and array of class IDs of each instance. Since we have
         # one class ID only, we return an array of 1s
-        return mask.astype(np.bool), np.ones([mask.shape[-1]], dtype=np.int32)
+        return mask.astype(bool), np.ones([mask.shape[-1]], dtype=np.int32)
 
     def image_reference(self, image_id):
         """Return the path of the image."""
