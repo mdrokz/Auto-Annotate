@@ -199,8 +199,8 @@ def box_refinement_graph(box, gt_box):
 
     dy = (gt_center_y - center_y) / height
     dx = (gt_center_x - center_x) / width
-    dh = tf.log(gt_height / height)
-    dw = tf.log(gt_width / width)
+    dh = tf.math.log(gt_height / height)
+    dw = tf.math.log(gt_width / width)
 
     result = tf.stack([dy, dx, dh, dw], axis=1)
     return result
@@ -419,6 +419,7 @@ def resize_image(image, min_dim=None, max_dim=None, min_scale=None, mode="square
     """
     # Keep track of image dtype and return results in the same dtype
     image_dtype = image.dtype
+    # print(image_dtype)
     # Default window (y1, x1, y2, x2) and default scale == 1.
     h, w = image.shape[:2]
     window = (0, 0, h, w)
@@ -893,16 +894,11 @@ def resize(image, output_shape, order=1, mode='constant', cval=0, clip=True,
     of skimage. This solves the problem by using different parameters per
     version. And it provides a central place to control resizing defaults.
     """
-    if LooseVersion(skimage.__version__) >= LooseVersion("0.14"):
-        # New in 0.14: anti_aliasing. Default it to False for backward
-        # compatibility with skimage 0.13.
-        return skimage.transform.resize(
-            image, output_shape,
-            order=order, mode=mode, cval=cval, clip=clip,
-            preserve_range=preserve_range, anti_aliasing=anti_aliasing,
-            anti_aliasing_sigma=anti_aliasing_sigma)
-    else:
-        return skimage.transform.resize(
-            image, output_shape,
-            order=order, mode=mode, cval=cval, clip=clip,
-            preserve_range=preserve_range)
+    if image.dtype == bool:
+        image = image.astype(int)
+
+    return skimage.transform.resize(
+        image, output_shape,
+        order=order, mode=mode, cval=cval, clip=clip,
+        preserve_range=preserve_range, anti_aliasing=anti_aliasing,
+        anti_aliasing_sigma=anti_aliasing_sigma)

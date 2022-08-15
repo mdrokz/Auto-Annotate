@@ -12,6 +12,7 @@ import sys
 import random
 import itertools
 import colorsys
+import io
 
 import numpy as np
 from skimage.measure import find_contours
@@ -80,12 +81,12 @@ def apply_mask(image, mask, color, alpha=0.5):
     return image
 
 
-def display_instances(image, boxes, masks, class_ids, class_names, labelId,
+def display_instances(image, boxes, masks, class_ids, class_names,
                       scores=None, title="",
-                      figsize=(16, 16), ax=None,
+                      figsize=(16, 16), figAx=None,
                       show_mask=True, show_bbox=True,
+                      show_caption=True,
                       colors=None, captions=None):
-                      
     """
     boxes: [num_instance, (y1, x1, y2, x2, class_id)] in image coordinates.
     masks: [height, width, num_instances]
@@ -98,6 +99,8 @@ def display_instances(image, boxes, masks, class_ids, class_names, labelId,
     colors: (optional) An array or colors to use with each object
     captions: (optional) A list of strings to use as captions for each object
     """
+    """image copy for furthere analysis"""
+    unmaskedimage = image.copy()
     # Number of instances
     N = boxes.shape[0]
     if not N:
@@ -107,9 +110,11 @@ def display_instances(image, boxes, masks, class_ids, class_names, labelId,
 
     # If no axis is passed, create one and automatically call show()
     auto_show = False
-    if not ax:
-        _, ax = plt.subplots(1, figsize=figsize)
+    if not figAx:
+        fig,ax = plt.subplots(1, figsize=figsize)
         auto_show = True
+    else:
+        fig,ax = figAx
 
     # Generate random colors
     colors = colors or random_colors(N)
@@ -120,27 +125,30 @@ def display_instances(image, boxes, masks, class_ids, class_names, labelId,
     ax.set_xlim(-10, width + 10)
     ax.axis('off')
     ax.set_title(title)
-
+    # print("image_size is {}".format(image.shape))
     masked_image = image.astype(np.uint32).copy()
     for i in range(N):
-        if(labelId == class_ids[i]):
-            color = colors[i]
+        color = colors[i]
 
-            # Bounding box
-            if not np.any(boxes[i]):
-                # Skip this instance. Has no bbox. Likely lost in image cropping.
-                continue
-            y1, x1, y2, x2 = boxes[i]
-            if show_bbox:
-                p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
-                                    alpha=0.7, linestyle="dashed",
-                                    edgecolor=color, facecolor='none')
-                ax.add_patch(p)
+        # Bounding box
+        if not np.any(boxes[i]):
+            # Skip this instance. Has no bbox. Likely lost in image cropping.
+            continue
+        y1, x1, y2, x2 = boxes[i]
+        if show_bbox:
+            p = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=2,
+                                   alpha=0.7, linestyle="dashed",
+                                   edgecolor=color, facecolor='none')
+            ax.add_patch(p)
 
-            # Label
+        # Label
+        if show_caption:
             if not captions:
                 class_id = class_ids[i]
-                score = scores[i] if scores is not None else None
+                if isinstance(scores, dict):
+                    score = scores[i] if scores is not None else None
+                else:
+                    score = None    
                 label = class_names[class_id]
                 caption = "{} {:.3f}".format(label, score) if score else label
             else:
@@ -148,26 +156,25 @@ def display_instances(image, boxes, masks, class_ids, class_names, labelId,
             ax.text(x1, y1 + 8, caption,
                     color='w', size=11, backgroundcolor="none")
 
-            # Mask
-            mask = masks[:, :, i]
-            if show_mask:
-                masked_image = apply_mask(masked_image, mask, color)
+        # Mask
+        mask = masks[:, :, i]
+        if show_mask:
+            masked_image = apply_mask(masked_image, mask, color)
 
-            # Mask Polygon
-            # Pad to ensure proper polygons for masks that touch image edges.
-            padded_mask = np.zeros(
-                (mask.shape[0] + 2, mask.shape[1] + 2), dtype=np.uint8)
-            padded_mask[1:-1, 1:-1] = mask
-            contours = find_contours(padded_mask, 0.5)
-            for verts in contours:
-                # Subtract the padding and flip (y, x) to (x, y)
-                verts = np.fliplr(verts) - 1
-                p = Polygon(verts, facecolor="none", edgecolor=color)
-                ax.add_patch(p)
+        # Mask Polygon
+        # Pad to ensure proper polygons for masks that touch image edges.
+        padded_mask = np.zeros(
+            (mask.shape[0] + 2, mask.shape[1] + 2), dtype=np.uint8)
+        padded_mask[1:-1, 1:-1] = mask
+        contours = find_contours(padded_mask, 0.5)
+        for verts in contours:
+            # Subtract the padding and flip (y, x) to (x, y)
+            verts = np.fliplr(verts) - 1
+            p = Polygon(verts, facecolor="none", edgecolor=color)
+            ax.add_patch(p)
     ax.imshow(masked_image.astype(np.uint8))
     if auto_show:
         plt.show()
-
 
 def display_differences(image,
                         gt_box, gt_class_id, gt_mask,
@@ -182,7 +189,7 @@ def display_differences(image,
         pred_box, pred_class_id, pred_score, pred_mask,
         iou_threshold=iou_threshold, score_threshold=score_threshold)
     # Ground truth = green. Predictions = red
-    colors = [(0, 1, 0, .8)] * len(gt_match)\
+    colors = [(0, 1, 0,.8)] * len(gt_match)\
            + [(1, 0, 0, 1)] * len(pred_match)
     # Concatenate GT and predictions
     class_ids = np.concatenate([gt_class_id, pred_class_id])
@@ -265,7 +272,7 @@ def draw_rois(image, rois, refined_rois, mask, class_ids, class_names, limit=10)
     print("Positive ROIs: ", class_ids[class_ids > 0].shape[0])
     print("Negative ROIs: ", class_ids[class_ids == 0].shape[0])
     print("Positive Ratio: {:.2f}".format(
-        class_ids[class_ids > 0].shape[0] / class_ids.shape[0]))
+                class_ids[class_ids > 0].shape[0] / class_ids.shape[0]))
 
 
 # TODO: Replace with matplotlib equivalent?
