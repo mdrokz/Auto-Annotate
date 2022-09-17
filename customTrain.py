@@ -119,6 +119,7 @@ class CustomDataset(utils.Dataset):
         """
         # If not a custom dataset image, delegate to parent class.
         image_info = self.image_info[image_id]
+        thita = np.linspace(-np.pi, np.pi, 10)
         if image_info["source"] != "text_bubble":
             return super(self.__class__, self).load_mask(image_id)
 
@@ -152,6 +153,8 @@ class CustomDataset(utils.Dataset):
                 all_points_y = [y, y, y+h, y+h]
 
             rr, cc = skimage.draw.polygon(all_points_y, all_points_x)
+            #rr[rr > mask.shape[0]-1] = mask.shape[0]-1
+            #cc[cc > mask.shape[1]-1] = mask.shape[1]-1
             # rr, cc = skimage.draw.polygon(p['ry'], p['cx'])
             mask[rr, cc, i] = 1    
 
